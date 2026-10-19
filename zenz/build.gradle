@@ -10,16 +10,16 @@ if (localPropertiesFile.exists()) {
 }
 
 def zenzModelRepo = providers.gradleProperty("zenzModelRepo")
-        .orElse(localProperties.getProperty("zenzModelRepo") ?: "togatogah/jinen-v2-small.gguf")
+        .orElse(localProperties.getProperty("zenzModelRepo") ?: "Miwa-Keita/zenz-v3.2-small-gguf")
         .get()
 def zenzModelRevision = providers.gradleProperty("zenzModelRevision")
-        .orElse(localProperties.getProperty("zenzModelRevision") ?: "3461d0573ab447985badde3174165b967d06076c")
+        .orElse(localProperties.getProperty("zenzModelRevision") ?: "c67e03e07d215c869f591b274c1631170d3e11fe")
         .get()
 def zenzModelQuantization = providers.gradleProperty("zenzModelQuantization")
         .orElse(localProperties.getProperty("zenzModelQuantization") ?: "Q5_K_M")
         .get()
 def zenzModelAssetName = providers.gradleProperty("zenzModelAssetName")
-        .orElse(localProperties.getProperty("zenzModelAssetName") ?: "jinen-v2-small-Q5_K_M.gguf")
+        .orElse(localProperties.getProperty("zenzModelAssetName") ?: "ggml-model-Q5_K_M.gguf")
         .get()
 // Files fetched from the model repo (comma-separated globs). Defaults to the GGUF asset only, so repos that
 // ship several quantizations (jinen: Q4/Q5/Q8/f16) do not download everything. Use "*" for a
