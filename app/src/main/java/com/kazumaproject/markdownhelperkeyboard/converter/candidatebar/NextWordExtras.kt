@@ -31,7 +31,7 @@ object NextWordExtras {
     private val AFTER_KANA = listOf("。", "、", "ね", "よ", "！")
 
     /** 表示する助詞・句読点の上限。 */
-    const val MAX_FUNCTION_WORDS = 3
+    const val MAX_FUNCTION_WORDS = 2 // necookey-exp: was 3
 
     private const val SENTENCE_END = "、。！？!?,.，．"
 
