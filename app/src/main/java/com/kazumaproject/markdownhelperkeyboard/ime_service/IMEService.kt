@@ -2185,8 +2185,8 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
         private const val SUMIRE_LM_RETRY_MS = 30_000L
         /** 案2 ラティス辺コスト表（LatticeLmCost、SLC2）のアセット。ビルド時に lm-data から取得（無ければ従来どおり）。 */
         private const val LATTICE_LM_ASSET = "lattice_lm/lc_np1m.slc"
-        private const val DEFAULT_MODEL_ASSET_NAME = "jinen-v2-small-Q5_K_M.gguf"
-        private const val LEGACY_ZENZ_MODEL_ASSET_NAME = "ggml-model-Q5_K_M.gguf"
+        private const val DEFAULT_MODEL_ASSET_NAME = "ggml-model-Q5_K_M.gguf" // zenz-v3.2-small（zenz/build.gradle と一致）
+        private const val LEGACY_ZENZ_MODEL_ASSET_NAME = "jinen-v2-small-Q5_K_M.gguf" // 旧内蔵 jinen のコピーは消す
         private const val NEXT_WORD_CANDIDATE_LIMIT = 6
         private const val LONG_DELAY_TIME = 64L
         private const val DEFAULT_DELAY_MS = 1000L
@@ -19544,10 +19544,10 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
     }
 
     private fun resolveZenzModelPath(customUri: String): String? {
-        // 内蔵モデルは jinen-v2-small（zenz/build.gradle の zenzModelAssetName と一致させる）。
+        // 内蔵モデルは zenz-v3.2-small（zenz/build.gradle の zenzModelAssetName と一致させる）。
         val defaultAssetFileName = DEFAULT_MODEL_ASSET_NAME
         val defaultDestFile = File(filesDir, defaultAssetFileName)
-        // 以前の内蔵 zenz モデルのコピーは使わないので消す（容量）。
+        // 以前の内蔵 jinen モデルのコピーは使わないので消す（容量）。
         File(filesDir, LEGACY_ZENZ_MODEL_ASSET_NAME).takeIf { it.exists() }?.delete()
 
         fun ensureDefaultModelCopied(): File {
