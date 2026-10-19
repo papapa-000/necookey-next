@@ -70,6 +70,18 @@
         </receiver>
 
         <service
+            android:name=".converter.context.ScreenContextService"
+            android:exported="false"
+            android:label="@string/screen_context_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/screen_context_service" />
+        </service>
+        <service
             android:name=".ime_service.IMEService"
             android:exported="true"
             android:label="@string/app_name"
