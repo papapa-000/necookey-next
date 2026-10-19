@@ -25,7 +25,7 @@ class ZenzaiScheduler {
         const val RHYTHM_GAP_MAX_MS = 900L
 
         /** 読みがこの文字数を超えたら、打鍵中も裏で推論する。 */
-        const val BACKGROUND_AFTER_CHARS = 3
+        const val BACKGROUND_AFTER_CHARS = 5
     }
 
     private var rhythmMs = -1f
