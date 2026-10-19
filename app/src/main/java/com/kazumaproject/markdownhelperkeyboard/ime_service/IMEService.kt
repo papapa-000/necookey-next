@@ -10975,7 +10975,8 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
      * 変換エンジンが jinen-v2（内蔵モデルの自由生成）か。zenz を選んでもモデルを読み込んでいなければ
      * 内蔵モデルは jinen なので jinen として扱う（zenz のプロンプトを jinen に渡さない）。
      */
-    private fun isJinenEngine(): Boolean = when (AppPreference.zenz_engine_preference) {
+    // 内蔵モデルを zenz-v3.2-small に変更したため jinen 経路は使わない（2026-10-19）。
+    private fun isJinenEngine(): Boolean = false && when (AppPreference.zenz_engine_preference) {
         ZENZ_ENGINE_ZENZ -> AppPreference.zenz_model_uri_preference.isBlank()
         // sumire_lm は内蔵の jinen を使わない（zenz を読み込んでいなければリランカーだけ）。
         ZENZ_ENGINE_SUMIRE_LM -> false
@@ -10986,10 +10987,8 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
     private fun isSumireLmEngine(): Boolean =
         AppPreference.zenz_engine_preference == ZENZ_ENGINE_SUMIRE_LM
 
-    /** zenz 用のプロンプト（評価）を渡せるモデル（読み込んだ zenz）があるか。内蔵モデルは jinen なので対象外。 */
-    private fun isZenzPromptModelLoaded(): Boolean =
-        AppPreference.zenz_engine_preference.let { it == ZENZ_ENGINE_ZENZ || it == ZENZ_ENGINE_SUMIRE_LM } &&
-            AppPreference.zenz_model_uri_preference.isNotBlank()
+    /** zenz 用のプロンプト（評価）を渡せるモデルがあるか。内蔵モデルが zenz-v3.2-small になったので常に真。 */
+    private fun isZenzPromptModelLoaded(): Boolean = true
 
     @Volatile private var latticeLmLoadStarted = false
 
