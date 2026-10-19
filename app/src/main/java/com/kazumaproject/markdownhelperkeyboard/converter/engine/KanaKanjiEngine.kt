@@ -4246,7 +4246,12 @@ class KanaKanjiEngine {
         return listJapaneseCandidates + numbersConverted + temporalCandidates
     }
 
-    private fun createTemporalDictionaryCandidates(input: String): List<Candidate> = when (input) {
+    // necookey-exp: いま/ことし/… → date and time candidates disabled at the user's request.
+    @Suppress("UNUSED_PARAMETER")
+    private fun createTemporalDictionaryCandidates(input: String): List<Candidate> = emptyList()
+
+    @Suppress("unused")
+    private fun createTemporalDictionaryCandidatesDisabled(input: String): List<Candidate> = when (input) {
         "いま" -> {
             val now = Calendar.getInstance()
             createCandidatesForTime(now, input)
