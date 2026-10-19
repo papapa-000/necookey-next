@@ -705,7 +705,7 @@ object AppPreference {
      * 変換エンジン: "sumire_lm"（Sumire + SUMIRE-LM リランカー、迷った読みだけ読み込んだ zenz で判断。sumire-lm-app の既定）/
      * "jinen"（内蔵 jinen-v2-small の自由生成）/ "zenz"（読み込んだ zenz モデルの評価ループ）。
      */
-    private val ZENZ_ENGINE_PREFERENCE = Pair("zenz_engine_preference", "sumire_lm")
+    private val ZENZ_ENGINE_PREFERENCE = Pair("zenz_engine_preference", "zenz")
     /** sumire_lm: リランカーの 1 位と 2 位のスコア差がこれ（百分の一単位）未満なら zenz に回す。 */
     private val SUMIRE_LM_ZENZ_MARGIN_PREFERENCE = Pair("sumire_lm_zenz_margin_preference", 50)
     /** 同音異義 UI の迷い印の判定にリランカーの文節マージン（SumireLmSpanMargin）を使う（既定オフ、設定画面なし）。 */
