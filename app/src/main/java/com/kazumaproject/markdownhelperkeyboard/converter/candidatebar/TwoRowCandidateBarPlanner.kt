@@ -162,7 +162,10 @@ object TwoRowCandidateBarPlanner {
         val wholeReadingAlternatives = conversionCandidates.filter {
             !isActionCandidate(it) && it.length.toInt() == input.length
         }
-        val predictions = (wholeReadingAlternatives + conversionCandidates).distinct().filter { candidate ->
+        // 予測が設定で有効なら従来どおり予測、無効なら読み全体の別変換（切り方違い）を出す。
+        val lowerSource = if (predictionCandidates.isNotEmpty()) predictionCandidates
+            else (wholeReadingAlternatives + conversionCandidates).distinct()
+        val predictions = lowerSource.filter { candidate ->
             if (isActionCandidate(candidate)) return@filter true
             candidate.string.isNotEmpty() &&
                 candidate.string !in visibleTop &&
