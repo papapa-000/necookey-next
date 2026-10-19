@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="screen_context_service_label">necookey 画面の文脈</string>
+    <string name="screen_context_service_description">キーボードを開いた時だけ画面の文字を読み、変換の文脈に使います。メモリ上のみで保存・送信しません。パスワード欄は読みません。</string>
+</resources>
