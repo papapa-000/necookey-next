@@ -1380,6 +1380,8 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
             }
                 .filter { it.string.isNotBlank() }
                 .distinctBy { it.string }
+                // necookey-exp: stricter follow-up words. Show only the few strongest matches.
+                .take(NECOOKEY_MAX_FOLLOW_WORDS)
             fun asCandidates(words: List<String>): List<Candidate> = words.map { word ->
                 Candidate(
                     string = word,
@@ -1398,7 +1400,8 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
             val functionWords: List<Candidate> = if (connectionRanked != null) {
                 emptyList()
             } else {
-                NextWordExtras.withoutBase(candidates, asCandidates(NextWordExtras.functionWordsAfter(key)))
+                // necookey-exp: the character-based guess is too loose; only connection-ranked words.
+                emptyList()
             }
 
             if (!canShowZeroQueryAfterCommit(key)) {
@@ -2161,6 +2164,7 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
         )
 
     companion object {
+        const val NECOOKEY_MAX_FOLLOW_WORDS = 3
         /** Learned following word (後続語) from the next-word table. */
         const val CANDIDATE_TYPE_NEXT_WORD: Byte = 53
         /** 文脈絵文字の事前スコア（モデルごとに一度だけ計算）の保存先。 */
@@ -4172,8 +4176,32 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
         mainView.root.clipToOutline = keyboardSkinId != KeyboardSkinId.DEFAULT || isKeyboardRounded == true
     }
 
+    // necookey-exp: fill the context word cache from the field and (if enabled) the screen.
+    private fun necookeyRefreshContext(editorInfo: EditorInfo?) {
+        val cache = com.kazumaproject.markdownhelperkeyboard.converter.context.ContextWordCache
+        cache.clear()
+        val info = editorInfo ?: return
+        val variation = info.inputType and android.text.InputType.TYPE_MASK_VARIATION
+        val cls = info.inputType and android.text.InputType.TYPE_MASK_CLASS
+        val isPassword = (cls == android.text.InputType.TYPE_CLASS_TEXT && (
+            variation == android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD ||
+                variation == android.text.InputType.TYPE_TEXT_VARIATION_VISIBLE_PASSWORD ||
+                variation == android.text.InputType.TYPE_TEXT_VARIATION_WEB_PASSWORD)) ||
+            (cls == android.text.InputType.TYPE_CLASS_NUMBER &&
+                variation == android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD)
+        val noLearning = (info.imeOptions and EditorInfo.IME_FLAG_NO_PERSONALIZED_LEARNING) != 0
+        if (isPassword || noLearning) return
+        val ic = currentInputConnection
+        val before = ic?.getTextBeforeCursor(500, 0)?.toString().orEmpty()
+        val after = ic?.getTextAfterCursor(200, 0)?.toString().orEmpty()
+        cache.setFieldText(before + "\n" + after)
+        com.kazumaproject.markdownhelperkeyboard.converter.context.ScreenContextService.refreshAsync()
+    }
+
     override fun onStartInputView(editorInfo: EditorInfo?, restarting: Boolean) {
+        if (AppVariantConfig.hasZenz) zenzRuntimeClient.onInputShown()
         super.onStartInputView(editorInfo, restarting)
+        necookeyRefreshContext(editorInfo)
         flickInputPreviewCoordinator.cancel(restore = true)
         clearZeroQueryAllState(refresh = false)
         // The input view can restart without onStartInput() after returning from settings.
@@ -4310,6 +4338,13 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
     }
 
     override fun onFinishInputView(finishingInput: Boolean) {
+        com.kazumaproject.markdownhelperkeyboard.converter.context.ContextWordCache.clear()
+        if (AppVariantConfig.hasZenz) {
+            // 節電: 閉じたら裏の推論を止め、1 分後に :zenz を解放（すぐ戻れば温かいまま）。
+            necookeyZenzForcedJob?.cancel()
+            necookeyZenzForcedJob = null
+            zenzRuntimeClient.onInputHidden()
+        }
         dismissKeyboardSelectionPopups()
         modeSwitchAwaitingCursorPosition = false
         dismissJob?.cancel()
@@ -10940,7 +10975,8 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
      * 変換エンジンが jinen-v2（内蔵モデルの自由生成）か。zenz を選んでもモデルを読み込んでいなければ
      * 内蔵モデルは jinen なので jinen として扱う（zenz のプロンプトを jinen に渡さない）。
      */
-    private fun isJinenEngine(): Boolean = when (AppPreference.zenz_engine_preference) {
+    // exp: 内蔵モデルを zenz-v3.2-small に差し替えたので jinen 経路は使わない（2026-10-19）。
+    private fun isJinenEngine(): Boolean = false && when (AppPreference.zenz_engine_preference) {
         ZENZ_ENGINE_ZENZ -> AppPreference.zenz_model_uri_preference.isBlank()
         // sumire_lm は内蔵の jinen を使わない（zenz を読み込んでいなければリランカーだけ）。
         ZENZ_ENGINE_SUMIRE_LM -> false
@@ -19505,7 +19541,7 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
             modelPath = modelPath,
             nCtx = ZENZ_N_CTX,
             // jinen は threads=2 固定（オフライン評価と同じ）。
-            nThreads = if (isJinenEngine()) 2 else (Runtime.getRuntime().availableProcessors() / 2).coerceIn(2, 4),
+            nThreads = 2, // 節電: 2 スレッド固定（2026-10-19）
         )
     }
 
