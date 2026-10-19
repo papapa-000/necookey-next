@@ -10975,8 +10975,7 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
      * 変換エンジンが jinen-v2（内蔵モデルの自由生成）か。zenz を選んでもモデルを読み込んでいなければ
      * 内蔵モデルは jinen なので jinen として扱う（zenz のプロンプトを jinen に渡さない）。
      */
-    // exp: 内蔵モデルを zenz-v3.2-small に差し替えたので jinen 経路は使わない（2026-10-19）。
-    private fun isJinenEngine(): Boolean = false && when (AppPreference.zenz_engine_preference) {
+    private fun isJinenEngine(): Boolean = when (AppPreference.zenz_engine_preference) {
         ZENZ_ENGINE_ZENZ -> AppPreference.zenz_model_uri_preference.isBlank()
         // sumire_lm は内蔵の jinen を使わない（zenz を読み込んでいなければリランカーだけ）。
         ZENZ_ENGINE_SUMIRE_LM -> false
