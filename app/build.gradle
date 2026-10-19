@@ -115,8 +115,12 @@ android {
     buildTypes {
         debug {
             signingConfig signingConfigs.necookeyCi
+            applicationIdSuffix ".exp"
+            versionNameSuffix "-exp"
         }
         release {
+            applicationIdSuffix ".exp"
+            versionNameSuffix "-exp"
             def releaseSigning = signingConfigs.findByName("release")
             // Without a local release keystore (CI), sign with the committed CI key so the
             // nightly release-type APK installs as an update over earlier CI builds.
