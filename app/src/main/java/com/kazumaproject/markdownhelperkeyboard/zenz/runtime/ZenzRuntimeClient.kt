@@ -4,7 +4,10 @@ import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.content.ServiceConnection
+import android.os.Handler
 import android.os.IBinder
+import android.os.Looper
+import android.os.SystemClock
 import com.kazumaproject.markdownhelperkeyboard.variant.AppVariantConfig
 import dagger.hilt.android.qualifiers.ApplicationContext
 import java.util.concurrent.atomic.AtomicLong
@@ -47,6 +50,51 @@ class ZenzRuntimeClient @Inject constructor(
     private val operationMutex = Mutex()
     private val nextRequestId = AtomicLong(1L)
     private val stateLock = Any()
+
+    // 節電: 推論が IDLE_RELEASE_MS 無ければ :zenz を切ってモデルと KV を解放する。
+    // キーボードを閉じたら HIDDEN_RELEASE_MS で解放（アプリ切り替え直後の冷えたロードは避ける）。
+    private val idleHandler = Handler(Looper.getMainLooper())
+    @Volatile private var lastActivityAt = 0L
+    @Volatile private var releaseAt = Long.MAX_VALUE
+    private val idleRelease = object : Runnable {
+        override fun run() {
+            val now = SystemClock.uptimeMillis()
+            if (activeRequestId != NO_REQUEST) {
+                idleHandler.postDelayed(this, BUSY_RECHECK_MS)
+                return
+            }
+            if (now < releaseAt) {
+                idleHandler.postDelayed(this, releaseAt - now)
+                return
+            }
+            if (serviceBound || runtime != null) close()
+        }
+    }
+
+    private fun touchActivity() {
+        val now = SystemClock.uptimeMillis()
+        lastActivityAt = now
+        scheduleRelease(now + IDLE_RELEASE_MS)
+    }
+
+    private fun scheduleRelease(at: Long) {
+        releaseAt = at
+        idleHandler.removeCallbacks(idleRelease)
+        idleHandler.postDelayed(idleRelease, (at - SystemClock.uptimeMillis()).coerceAtLeast(0L))
+    }
+
+    /** キーボードが閉じた: 走っている推論を止め、少し待って解放する。 */
+    fun onInputHidden() {
+        cancelActive()
+        if (serviceBound || runtime != null) {
+            scheduleRelease(SystemClock.uptimeMillis() + HIDDEN_RELEASE_MS)
+        }
+    }
+
+    /** キーボードが開いた: 閉じた時の早めの解放をやめ、通常のアイドル解放に戻す。 */
+    fun onInputShown() {
+        if (serviceBound || runtime != null) touchActivity()
+    }
 
     @Volatile
     private var runtime: IZenzRuntime? = null
@@ -206,6 +254,8 @@ class ZenzRuntimeClient @Inject constructor(
      * close if Android tears the remote service down immediately.
      */
     fun close() {
+        idleHandler.removeCallbacks(idleRelease)
+        releaseAt = Long.MAX_VALUE
         cancelActive()
         runCatching { runtime?.closeEngine() }
         val shouldUnbind = synchronized(stateLock) {
@@ -310,6 +360,7 @@ class ZenzRuntimeClient @Inject constructor(
             }
         }
 
+        touchActivity()
         return try {
             start(requestId, callback)
             withTimeout(timeoutMillis) { completion.await() }
@@ -319,6 +370,7 @@ class ZenzRuntimeClient @Inject constructor(
             }
             if (activeRequestId == requestId) activeRequestId = NO_REQUEST
             if (activeCompletion === completion) activeCompletion = null
+            touchActivity()
         }
     }
 
@@ -402,6 +454,9 @@ class ZenzRuntimeClient @Inject constructor(
             "com.kazumaproject.markdownhelperkeyboard.zenz.runtime.ZenzRuntimeService"
         private const val NO_REQUEST = -1L
         private const val BIND_TIMEOUT_MS = 10_000L
+        private const val IDLE_RELEASE_MS = 3 * 60_000L
+        private const val HIDDEN_RELEASE_MS = 60_000L
+        private const val BUSY_RECHECK_MS = 5_000L
         private const val INITIALIZE_TIMEOUT_MS = 30_000L
         private const val GENERATE_TIMEOUT_MS = 30_000L
     }
