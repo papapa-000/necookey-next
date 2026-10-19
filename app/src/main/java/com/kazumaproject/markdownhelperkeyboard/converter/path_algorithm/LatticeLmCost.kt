@@ -2,6 +2,7 @@ package com.kazumaproject.markdownhelperkeyboard.converter.path_algorithm
 
 import com.kazumaproject.graph.MozcNodeType
 import com.kazumaproject.graph.Node
+import com.kazumaproject.graph.CandidateSource
 import java.io.DataInputStream
 import java.io.InputStream
 
@@ -27,10 +28,19 @@ object LatticeLmCost {
     /** FindPath.getEdgeCost から呼ぶ。表なし・EOS への辺は 0。 */
     @JvmStatic
     fun correction(prev: Node, node: Node): Int {
+        // necookey-exp: topic words from the field / screen (works even without the LM table).
+        val contextBonus = com.kazumaproject.markdownhelperkeyboard.converter.context.ContextWordCache.bonus(node.tango)
+        return correctionLm(prev, node) - contextBonus
+    }
+
+    private fun correctionLm(prev: Node, node: Node): Int {
         val t = table ?: return 0
         if (node.mozcNodeType == MozcNodeType.EOS || node.tango == "EOS") return 0
         val bos = prev.mozcNodeType == MozcNodeType.BOS || prev.tango == "BOS"
-        return t.correction(if (bos) null else prev.tango, node.tango)
+        // necookey-exp: the kana fallback is out of vocabulary by construction; do not stack
+        // the OOV penalty on top of its own unknown-word cost.
+        val applyOov = node.candidateSource != CandidateSource.UNKNOWN
+        return t.correction(if (bos) null else prev.tango, node.tango, applyOov)
     }
 
     @JvmStatic
@@ -122,11 +132,11 @@ object LatticeLmCost {
 
         fun isKnown(word: String): Boolean = wordIndex(wordHash(word)) >= 0
 
-        fun correction(prev: String?, word: String): Int {
+        fun correction(prev: String?, word: String, applyOov: Boolean = true): Int {
             val hw = wordHash(word)
             val wi = wordIndex(hw)
             val lpq = logProbQ(prev, hw, wi)
-            val oov = if (wi >= 0) 0.0 else omega.toDouble()
+            val oov = if (wi >= 0 || !applyOov) 0.0 else omega.toDouble()
             return Math.rint(lam.toDouble() * (-lpq / qs.toDouble()) + mu.toDouble() + oov).toInt()
         }
 
