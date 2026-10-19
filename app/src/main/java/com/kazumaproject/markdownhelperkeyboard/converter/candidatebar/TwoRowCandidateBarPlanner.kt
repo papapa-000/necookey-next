@@ -10,7 +10,13 @@ data class TwoRowCandidateBar(
     val firstBunsetsuAlternatives: List<Candidate>,
     /** Bottom row: prediction candidates not already shown in the top row. */
     val predictions: List<Candidate>,
+    /** necookey-exp: indices (into the analysis slots) of bunsetsu the engine is unsure about. */
+    val uncertainSlotIndices: List<Int> = emptyList(),
+    /** necookey-exp: the slot whose alternatives the top row shows, or -1 (old first-bunsetsu mode). */
+    val focusedSlotIndex: Int = -1,
 ) {
+    /** True when the bar should show the small "next uncertain bunsetsu" arrow. */
+    val hasNextUncertain: Boolean get() = uncertainSlotIndices.size > 1
     val topRow: List<Candidate> get() = listOfNotNull(primary) + firstBunsetsuAlternatives
 
     companion object {
@@ -22,6 +28,9 @@ object TwoRowCandidateBarPlanner {
 
     /** Sumire's type 5 ("combine part of letters"): a candidate covering a reading prefix. */
     const val CANDIDATE_TYPE_NBEST_PARTIAL: Byte = 5
+
+    /** necookey-exp: a bunsetsu is "uncertain" when its runner-up path costs less than this extra. */
+    const val UNCERTAIN_MARGIN = 1200
 
     /**
      * @param input the current reading.
@@ -40,6 +49,8 @@ object TwoRowCandidateBarPlanner {
         predictionCandidates: List<Candidate>,
         config: NecookeyCandidateBarConfig = NecookeyCandidateBarConfig.DEFAULT,
         isActionCandidate: (Candidate) -> Boolean = { false },
+        /** necookey-exp: which uncertain bunsetsu to focus (index into the uncertain list, wraps). */
+        uncertainFocus: Int = 0,
     ): TwoRowCandidateBar {
         if (input.isEmpty()) return TwoRowCandidateBar.EMPTY
 
@@ -77,7 +88,39 @@ object TwoRowCandidateBarPlanner {
         } else {
             sumireFirstEnd
         }
-        if (analysis != null && firstEnd != null && firstEnd in 1 until input.length) {
+        // necookey-exp: show alternatives only for bunsetsu the engine hesitates on. Each
+        // alternative is a whole-reading candidate with just that bunsetsu swapped, so picking it
+        // commits the full conversion and needs no partial-commit handling.
+        val slots = analysis?.slots.orEmpty()
+        val engineOwnsPrimary = analysis != null && sumirePrimary != null && primary === sumirePrimary &&
+            sumirePrimary.string == analysis.primary.string && slots.size > 1 &&
+            slots.last().span.end == input.length
+        val uncertainSlots = if (engineOwnsPrimary) {
+            slots.indices.filter { idx ->
+                val a = slots[idx].alternatives
+                a.size > 1 && a[1].pathCost - a[0].pathCost < UNCERTAIN_MARGIN
+            }.sortedBy { idx -> slots[idx].span.start }
+        } else {
+            emptyList()
+        }
+        var focusedSlot = -1
+        if (uncertainSlots.isNotEmpty()) {
+            focusedSlot = uncertainSlots[Math.floorMod(uncertainFocus, uncertainSlots.size)]
+            for (alt in slots[focusedSlot].alternatives.drop(1)) {
+                if (alt.output.isEmpty()) continue
+                val whole = slots.mapIndexed { j, slot ->
+                    if (j == focusedSlot) alt.output else slot.primaryOutput
+                }.joinToString("")
+                if (!shownTop.add(whole)) continue
+                alternatives += Candidate(
+                    string = whole,
+                    type = sumirePrimary!!.type,
+                    length = input.length.toUByte(),
+                    score = alt.pathCost,
+                    yomi = input,
+                )
+            }
+        } else if (analysis != null && firstEnd != null && firstEnd in 1 until input.length) {
             // 1) Bunsetsu-level alternatives from Sumire's N-best paths (same [0, firstEnd) range).
             val slotAlternatives =
                 if (firstEnd == sumireFirstEnd) analysis.slots.first().alternatives else emptyList()
@@ -114,7 +157,12 @@ object TwoRowCandidateBarPlanner {
         primary?.let { visibleTop += it.string }
         topAlternatives.forEach { visibleTop += it.string }
         val shownBottom = HashSet<String>()
-        val predictions = predictionCandidates.filter { candidate ->
+        // necookey-exp: no look-ahead prediction. The bottom row shows whole-reading conversions
+        // from Sumire's N-best (different segmentations / word choices), then the rest.
+        val wholeReadingAlternatives = conversionCandidates.filter {
+            !isActionCandidate(it) && it.length.toInt() == input.length
+        }
+        val predictions = (wholeReadingAlternatives + conversionCandidates).distinct().filter { candidate ->
             if (isActionCandidate(candidate)) return@filter true
             candidate.string.isNotEmpty() &&
                 candidate.string !in visibleTop &&
@@ -125,6 +173,8 @@ object TwoRowCandidateBarPlanner {
             primary = primary,
             firstBunsetsuAlternatives = topAlternatives,
             predictions = predictions,
+            uncertainSlotIndices = uncertainSlots,
+            focusedSlotIndex = focusedSlot,
         )
     }
 }
