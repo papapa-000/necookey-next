@@ -109,7 +109,7 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: .zenz-model-cache
-          key: zenz-model-v32small-c67e03e0-Q5_K_M
+          key: zenz-model-v2-4f5423f0fad41a73b1242eb96fe5c12ae4fdca83-Q5_K_M
 
       - name: Prepare zenz model
         env:
@@ -121,7 +121,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: .zenz-model-cache
-          key: zenz-model-v32small-c67e03e0-Q5_K_M
+          key: zenz-model-v2-4f5423f0fad41a73b1242eb96fe5c12ae4fdca83-Q5_K_M
 
       # SUMIRE-LM 案2 ラティス辺コスト表: 孤立ブランチ lm-data の固定コミットから git で取り出す（非公開リポジトリなので raw URL は不可）。
       # sha256 は app/build.gradle の fetchLatticeLmTable が照合し、不一致ならビルド失敗。
