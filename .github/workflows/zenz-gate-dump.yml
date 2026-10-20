@@ -59,10 +59,11 @@ jobs:
         with: { python-version: '3.12' }
       - name: zenz LL
         run: |
-          set -o pipefail
-          CMAKE_ARGS="-DGGML_NATIVE=OFF" pip install -q numpy llama-cpp-python huggingface_hub 2>&1 | tail -20 >> log.${{ matrix.shard }}.txt
-          python -c "from huggingface_hub import hf_hub_download as d; print(d('Miwa-Keita/zenz-v3.2-small-gguf','ggml-model-Q5_K_M.gguf',local_dir='.'))"
-          python tools/zgate/zgate.py data/all.tsv cands.tsv ggml-model-Q5_K_M.gguf zg.${{ matrix.shard }}.tsv 2>&1 | tail -30 >> log.${{ matrix.shard }}.txt
+          L=log.${{ matrix.shard }}.txt
+          fail() { echo "::error::$(tail -c 3000 $L | sed ':a;N;$!ba;s/%/%25/g;s/\r//g;s/\n/%0A/g')"; exit 1; }
+          CMAKE_ARGS="-DGGML_NATIVE=OFF" pip install -q numpy llama-cpp-python huggingface_hub >> $L 2>&1 || fail
+          python -c "from huggingface_hub import hf_hub_download as d; print(d('Miwa-Keita/zenz-v3.2-small-gguf','ggml-model-Q5_K_M.gguf',local_dir='.'))" >> $L 2>&1 || fail
+          python tools/zgate/zgate.py data/all.tsv cands.tsv ggml-model-Q5_K_M.gguf zg.${{ matrix.shard }}.tsv >> $L 2>&1 || fail
           wc -l zg.${{ matrix.shard }}.tsv
       - uses: actions/upload-artifact@v7
         if: always()
@@ -84,5 +85,5 @@ jobs:
       - env: { GH_TOKEN: '${{ github.token }}' }
         run: |
           cat log.*.txt > logs.txt || true
-          : > zgate.tsv; for f in zg.*.tsv; do [ -s zgate.tsv ] && tail -n +2 $f >> zgate.tsv || cat $f >> zgate.tsv; done; wc -l zgate.tsv
+          : > zgate.tsv; for f in zg.*.tsv; do [ -f "$f" ] || continue; if [ -s zgate.tsv ]; then tail -n +2 "$f" >> zgate.tsv; else cat "$f" >> zgate.tsv; fi; done; wc -l zgate.tsv
           gh release create zgate-${{ github.run_id }} zgate.tsv logs.txt --repo ${{ github.repository }} --prerelease --title "zgate data" --notes "numeric only"
