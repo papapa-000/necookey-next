@@ -73,7 +73,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v7
-        with: { pattern: zg-[0-9]*, merge-multiple: true }
+        with:
+          pattern: 'zg-[0-9]*'
+          merge-multiple: true
       - env: { GH_TOKEN: '${{ github.token }}' }
         run: |
           head -1 zg.0.tsv > zgate.tsv; for f in zg.*.tsv; do tail -n +2 $f >> zgate.tsv; done; wc -l zgate.tsv
