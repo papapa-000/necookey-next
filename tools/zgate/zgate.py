@@ -18,7 +18,18 @@ for line in open(cands, encoding='utf-8'):
     except ValueError:
         continue
 print('sentences', len(rows), 'with cands', len(by), flush=True)
-llm = Llama(model_path=model, n_ctx=512, n_threads=4, logits_all=True, verbose=False)
+# zenz の前処理名 gpt2-small-japanese-char は本家 llama.cpp に無いので default で上書きし、
+# 文字単位モデルなので 1 文字ずつトークン化して連結する。
+llm = Llama(model_path=model, n_ctx=512, n_threads=4, logits_all=True, verbose=False,
+            kv_overrides={'tokenizer.ggml.pre': 'default'})
+_tc = {}
+def toks(text):
+    out = []
+    for ch in text:
+        if ch not in _tc:
+            _tc[ch] = llm.tokenize(ch.encode(), add_bos=False, special=True)
+        out += _tc[ch]
+    return out
 EOS = llm.token_eos()
 def kata(s): return ''.join(chr(ord(ch) + 0x60) if 'ぁ' <= ch <= 'ゖ' else ch for ch in s)
 def hira(s): return all('ぁ' <= ch <= 'ゟ' or ch == 'ー' for ch in s)
@@ -43,11 +54,11 @@ for i, (sid, cl) in enumerate(by.items()):
     kana2 = sum(1 for r, w in s1 if len(w) >= 2 and hira(w))
     kat = int(any(all('ァ' <= ch <= 'ヺ' or ch == 'ー' for ch in w) for _, w in s1))
     prompt = ('\uEE02' + ctx[-40:] if ctx else '') + '\uEE00' + kata(reading) + '\uEE01'
-    P = llm.tokenize(prompt.encode(), add_bos=False, special=True)
+    P = toks(prompt)
     llm.reset(); llm.eval(P)
     lls = []
     for x in cl[:K]:
-        C = llm.tokenize(x[1].encode(), add_bos=False, special=False) + [EOS]
+        C = toks(x[1]) + [EOS]
         llm.n_tokens = len(P)
         llm.eval(C)
         lg = np.array(llm.scores[len(P) - 1:len(P) - 1 + len(C)], dtype=np.float64)
