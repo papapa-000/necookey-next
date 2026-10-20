@@ -10990,6 +10990,9 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
     /** zenz 用のプロンプト（評価）を渡せるモデルがあるか。内蔵モデルが zenz-v3.2-small になったので常に真。 */
     private fun isZenzPromptModelLoaded(): Boolean = true
 
+    private data class ZenzaiAgreed(val left: String, val input: String, val output: String)
+    @Volatile private var zenzaiLastAgreed: ZenzaiAgreed? = null
+
     @Volatile private var latticeLmLoadStarted = false
 
     /**
@@ -11249,6 +11252,17 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
 
         val key = zenzaiKey(context, insertString, draft.string)
         val cached = synchronized(zenzaiVerdictCache) { zenzaiVerdictCache[key] }
+        // 節電: 直前に zenz が同意した下書きの後ろにひらがなが増えただけなら呼ばない（未確定の語尾は次の変化で検証）。
+        val agreedBefore = zenzaiLastAgreed
+        if (constraint == null && cached == null && agreedBefore != null &&
+            agreedBefore.left == context.leftContext &&
+            insertString.startsWith(agreedBefore.input) && insertString != agreedBefore.input &&
+            draft.string.startsWith(agreedBefore.output) &&
+            draft.string.substring(agreedBefore.output.length).all { it in '\u3041'..'\u309F' || it == 'ー' }
+        ) {
+            zenzaiCarry = null
+            return ZenzaiOutcome(top = draft, changed = false, inferred = false, unverifiedFix = false)
+        }
         // ZENZ-GATE: Sumire が十分に自信のある読みは評価しない（制約の引き継ぎ中・判定キャッシュありは対象外）。
         if (constraint == null && cached == null &&
             !ZenzaiGate.shouldEvaluate(insertString.length, context.leftContext.length, sumireGap)
@@ -11320,6 +11334,7 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
         if (agreed && !top.zenzAdjusted) {
             top = top.copy(zenzChecked = true)
         }
+        zenzaiLastAgreed = if (agreed && !top.zenzAdjusted) ZenzaiAgreed(context.leftContext, insertString, draft.string) else null
         zenzaiCarry = constraint
         Timber.d(
             "zenzai: input=[%s] draft=[%s] verdict=[%s] top=[%s] constraint=[%s/%s] inferred=%s",
