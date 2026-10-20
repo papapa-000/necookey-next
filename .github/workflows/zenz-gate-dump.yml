@@ -1,0 +1,80 @@
+name: zenz gate data
+# tools/zgate/trigger.txt を変えて push すると走る。出力は数値のみ（本文なし）を Release に添付。
+on:
+  push:
+    paths: ['tools/zgate/trigger.txt']
+permissions:
+  contents: write
+jobs:
+  prep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: |
+          pip install -q fugashi unidic-lite pyahocorasick
+          mkdir -p data && cd data
+          curl -sSfL -o jwtd.tar.gz https://nlp.ist.i.kyoto-u.ac.jp/nl-resource/JWTD/jwtd_v2.0.tar.gz
+          tar xzf jwtd.tar.gz
+          git clone -q https://github.com/azooKey/AJIMEE-Bench ajimee
+          python ../tools/sumire_lm/build_jwtd.py 3000
+          cat ajimee.tsv jwtd_kc.tsv > all.tsv
+          wc -l all.tsv
+      - uses: actions/upload-artifact@v7
+        with: { name: zg-in, path: data/all.tsv, retention-days: 2 }
+  dump:
+    needs: prep
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix: { shard: [0, 1, 2, 3] }
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-java@v5
+        with: { java-version: '17', distribution: temurin }
+      - uses: android-actions/setup-android@v4
+      - run: sdkmanager "platforms;android-36"
+      - uses: actions/cache@v5
+        with:
+          path: |
+            ~/.gradle/caches
+            ~/.gradle/wrapper
+          key: ${{ runner.os }}-zg-gradle-${{ hashFiles('**/*.gradle*', '**/gradle-wrapper.properties') }}
+          restore-keys: ${{ runner.os }}-gradle-
+      - uses: actions/download-artifact@v7
+        with: { name: zg-in, path: data }
+      - name: Sumire N-best
+        env:
+          NK_DUMP_IN: ${{ github.workspace }}/data/all.tsv
+          NK_DUMP_OUT: ${{ github.workspace }}/cands.tsv
+          NK_DUMP_SHARD: ${{ matrix.shard }}/4
+        run: |
+          cp tools/sumire_lm/ci/SumireNbestDumpTest.kt app/src/test/java/com/kazumaproject/markdownhelperkeyboard/converter/quality/
+          ./gradlew :app:testLiteStandardDebugUnitTest --tests '*SumireNbestDumpTest*' -i --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx3g 2>&1 | grep -E "dumped|FAILED|BUILD|error:|e: |Exception" | head -100
+          wc -l cands.tsv
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: zenz LL
+        run: |
+          CMAKE_ARGS="-DGGML_NATIVE=OFF" pip install -q numpy llama-cpp-python huggingface_hub
+          python -c "from huggingface_hub import hf_hub_download as d; print(d('Miwa-Keita/zenz-v3.2-small-gguf','ggml-model-Q5_K_M.gguf',local_dir='.'))"
+          python tools/zgate/zgate.py data/all.tsv cands.tsv ggml-model-Q5_K_M.gguf zg.${{ matrix.shard }}.tsv
+          wc -l zg.${{ matrix.shard }}.tsv
+      - uses: actions/upload-artifact@v7
+        with:
+          name: zg-${{ matrix.shard }}
+          path: zg.*.tsv
+          retention-days: 2
+  publish:
+    needs: dump
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v7
+        with: { pattern: zg-[0-9]*, merge-multiple: true }
+      - env: { GH_TOKEN: '${{ github.token }}' }
+        run: |
+          head -1 zg.0.tsv > zgate.tsv; for f in zg.*.tsv; do tail -n +2 $f >> zgate.tsv; done; wc -l zgate.tsv
+          gh release create zgate-${{ github.run_id }} zgate.tsv --repo ${{ github.repository }} --prerelease --title "zgate data" --notes "numeric only"
