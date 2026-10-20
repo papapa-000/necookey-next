@@ -17,6 +17,13 @@ object ContextWordCache {
 
     fun setFieldText(text: String) { fieldWords = extract(text) }
     fun setScreenText(text: String) { screenWords = extract(text) }
+    /** zenz の話題欄用: 画面と入力欄の語（長い順に最大 60 字）。 */
+    fun topicText(): String {
+        val words = (screenWords + fieldWords).sortedByDescending { it.length }
+        val sb = StringBuilder()
+        for (w in words) { if (sb.length + w.length + 1 > 60) break; if (sb.isNotEmpty()) sb.append('、'); sb.append(w) }
+        return sb.toString()
+    }
     fun clear() { fieldWords = emptySet(); screenWords = emptySet() }
 
     /** Cost to subtract for a node surface (0 when unknown or not content-like). */
