@@ -12,8 +12,12 @@ for line in open(tsv, encoding='utf-8'):
 by = {}
 for line in open(cands, encoding='utf-8'):
     c = line.rstrip('\n').split('\t')
-    if len(c) < 8 or c[0] not in rows or int(c[1]) >= 50: continue
-    by.setdefault(c[0], []).append((int(c[1]), c[2], int(c[3]), int(c[4]), c[7]))
+    try:
+        if len(c) < 8 or c[0] not in rows or int(c[1]) >= 50: continue
+        by.setdefault(c[0], []).append((int(c[1]), c[2], int(c[3]), int(c[4]), c[7]))
+    except ValueError:
+        continue
+print('sentences', len(rows), 'with cands', len(by), flush=True)
 llm = Llama(model_path=model, n_ctx=512, n_threads=4, logits_all=True, verbose=False)
 EOS = llm.token_eos()
 def kata(s): return ''.join(chr(ord(ch) + 0x60) if 'ぁ' <= ch <= 'ゖ' else ch for ch in s)
