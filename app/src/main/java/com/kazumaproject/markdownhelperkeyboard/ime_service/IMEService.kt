@@ -11274,7 +11274,7 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
             zenzRuntimeClient.evaluate(
                 config = config,
                 profile = "",
-                topic = "",
+                topic = ContextWordCache.topicText(),
                 style = "",
                 preference = "",
                 leftContext = context.leftContext
