@@ -1,5 +1,6 @@
 package com.kazumaproject.markdownhelperkeyboard.ime_service
 
+import com.kazumaproject.markdownhelperkeyboard.converter.context.ContextWordCache
 import com.kazumaproject.markdownhelperkeyboard.converter.path_algorithm.LatticeLmCost
 import android.annotation.SuppressLint
 import android.Manifest
@@ -15699,6 +15700,9 @@ class IMEService : InputMethodService(), LifecycleOwner, InputConnection,
             conversionLearningSession.cancel()
             return
         }
+        // 蒸留: zenz が直した候補を確定したら、1 位でも学習する（次から Sumire が自力で当てる）。
+        @Suppress("NAME_SHADOWING")
+        val explicitlySelected = explicitlySelected || candidate.zenzAdjusted
         captureLearningSessionLeftContext(originalReading)
         conversionLearningSession.beginIfNeeded(originalReading)
         val bunsetsu = learningBunsetsuFor(segmentReading, output, candidate)
