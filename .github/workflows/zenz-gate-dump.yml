@@ -54,22 +54,27 @@ jobs:
         run: |
           cp tools/sumire_lm/ci/SumireNbestDumpTest.kt app/src/test/java/com/kazumaproject/markdownhelperkeyboard/converter/quality/
           ./gradlew :app:testLiteStandardDebugUnitTest --tests '*SumireNbestDumpTest*' -i --no-daemon --max-workers=2 -Dorg.gradle.jvmargs=-Xmx3g 2>&1 | grep -E "dumped|FAILED|BUILD|error:|e: |Exception" | head -100
-          wc -l cands.tsv
+          wc -l cands.tsv | tee log.${{ matrix.shard }}.txt; head -c 600 cands.tsv | cut -f2-8 | tr -d '\0' >> log.${{ matrix.shard }}.txt || true
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - name: zenz LL
         run: |
-          CMAKE_ARGS="-DGGML_NATIVE=OFF" pip install -q numpy llama-cpp-python huggingface_hub
+          set -o pipefail
+          CMAKE_ARGS="-DGGML_NATIVE=OFF" pip install -q numpy llama-cpp-python huggingface_hub 2>&1 | tail -20 >> log.${{ matrix.shard }}.txt
           python -c "from huggingface_hub import hf_hub_download as d; print(d('Miwa-Keita/zenz-v3.2-small-gguf','ggml-model-Q5_K_M.gguf',local_dir='.'))"
-          python tools/zgate/zgate.py data/all.tsv cands.tsv ggml-model-Q5_K_M.gguf zg.${{ matrix.shard }}.tsv
+          python tools/zgate/zgate.py data/all.tsv cands.tsv ggml-model-Q5_K_M.gguf zg.${{ matrix.shard }}.tsv 2>&1 | tail -30 >> log.${{ matrix.shard }}.txt
           wc -l zg.${{ matrix.shard }}.tsv
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: zg-${{ matrix.shard }}
-          path: zg.*.tsv
+          path: |
+            zg.*.tsv
+            log.*.txt
           retention-days: 2
   publish:
     needs: dump
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - uses: actions/download-artifact@v7
@@ -78,5 +83,6 @@ jobs:
           merge-multiple: true
       - env: { GH_TOKEN: '${{ github.token }}' }
         run: |
-          head -1 zg.0.tsv > zgate.tsv; for f in zg.*.tsv; do tail -n +2 $f >> zgate.tsv; done; wc -l zgate.tsv
-          gh release create zgate-${{ github.run_id }} zgate.tsv --repo ${{ github.repository }} --prerelease --title "zgate data" --notes "numeric only"
+          cat log.*.txt > logs.txt || true
+          : > zgate.tsv; for f in zg.*.tsv; do [ -s zgate.tsv ] && tail -n +2 $f >> zgate.tsv || cat $f >> zgate.tsv; done; wc -l zgate.tsv
+          gh release create zgate-${{ github.run_id }} zgate.tsv logs.txt --repo ${{ github.repository }} --prerelease --title "zgate data" --notes "numeric only"
